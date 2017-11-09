@@ -18,8 +18,8 @@ import twitter_info # same deal as always...
 import json
 import sqlite3
 
-## Your name:
-## The names of anyone you worked with on this project:
+## Your name: Dinga Derek Chen
+## The names of anyone you worked with on this project: None
 
 #####
 
@@ -127,7 +127,7 @@ favorites = True
 joined_data = True
 
 # Make a query using an INNER JOIN to get a list of tuples with 2 
-# elements in each tuple: the user screenname and the text of the 
+# elements in each tuple: the user screenname and the text of the
 # tweet in descending order based on retweets. Save the resulting 
 # list of tuples in a variable called joined_data2.
 
