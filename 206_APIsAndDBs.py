@@ -14,9 +14,10 @@ import unittest
 import itertools
 import collections
 import tweepy
-import twitter_info # same deal as always...
+import twitter_info  # same deal as always...
 import json
 import sqlite3
+from tweepy import parsers
 
 ## Your name: Dinga Derek Chen
 ## The names of anyone you worked with on this project: None
@@ -48,21 +49,30 @@ api = tweepy.API(auth, parser=tweepy.parsers.JSONParser())
 ## write the rest of the code in this file.
 
 CACHE_FNAME = "206_APIsAndDBs_cache.json"
+
+
 # Put the rest of your caching setup here:
-
-
-
 # Define your function get_user_tweets here:
 
+def get_user_tweets(scr_name, cacaname=CACHE_FNAME):
+    CACHE_FNAME = cacaname
+    try:
+        cache_file = open(CACHE_FNAME, 'r')
+        cache_contents = cache_file.read()
+        cache_file.close()
+        CACHE_DICTION = json.loads(cache_contents)
+    except:
+        CACHE_DICTION = {}
+    if CACHE_DICTION == {}:
+        CACHE_DICTION = [i for i in api.user_timeline(screen_name=scr_name, count=21, include_rts=True)]
+        open('{}'.format(CACHE_FNAME), 'w').write(json.dumps(CACHE_DICTION))
+    return (CACHE_DICTION)
 
 
-
-
-# Write an invocation to the function for the "umich" user timeline and 
+# Write an invocation to the function for the "umich" user timeline and
 # save the result in a variable called umich_tweets:
 
-
-
+umich_tweets = get_user_tweets('@umich')
 
 ## Task 2 - Creating database and loading data into database
 ## You should load into the Users table:
@@ -72,7 +82,52 @@ CACHE_FNAME = "206_APIsAndDBs_cache.json"
 # mentioned in the umich timeline, that Twitter user's info should be 
 # in the Users table, etc.
 
-
+conn = sqlite3.connect('206_APIsAndDBs.sqlite')
+cur = conn.cursor()
+try:
+    cur.execute(
+        "CREATE TABLE `Tweets` (`tweet_id`	TEXT NOT NULL UNIQUE,`text`	TEXT,`user_posted`	TEXT,`time_posted`	DATETIME,`retweets`	INTEGER,PRIMARY KEY(`tweet_id`), FOREIGN KEY(`user_posted`) REFERENCES Users(user_id));")
+except:
+    pass
+try:
+    cur.execute(
+        "CREATE TABLE `Users` (`user_id`	TEXT NOT NULL UNIQUE,`screen_name`	TEXT,`num_favs`	INTEGER,`description`	TEXT,PRIMARY KEY(`user_id`));")
+except:
+    pass
+conn.commit()
+ins_usr = 'INSERT INTO Users VALUES (?,?,?,?)'
+ins_twt = 'INSERT INTO Tweets VALUES (?,?,?,?,?)'
+for i in umich_tweets:
+    for j in (i['entities']['user_mentions']):
+        us = api.get_user(id=j['id'])
+        idd = (us['id'])
+        sc_name = (us['screen_name'])
+        desc = (us['description'])
+        fav = (us['favourites_count'])
+        try:
+            cur.execute(ins_usr, (idd, sc_name, fav, desc))
+        except Exception as ex:
+            print(ex)
+    us = i['user']
+    idd = (us['id'])
+    sc_name = (us['screen_name'])
+    desc = (us['description'])
+    fav = (us['favourites_count'])
+    try:
+        cur.execute(ins_usr, (idd, sc_name, fav, desc))
+    except Exception as ex:
+        print(ex)
+    twt_id = i['id']
+    twt_txt = i['text']
+    usrp = i['user']['id']
+    time_psted = i['created_at']
+    rtrs = i['retweet_count']
+    try:
+        cur.execute(ins_twt, (twt_id, twt_txt, usrp, time_psted, rtrs))
+    except Exception as ex:
+        #print(ex)
+        pass
+conn.commit()
 
 ## You should load into the Tweets table: 
 # Info about all the tweets (at least 20) that you gather from the 
@@ -100,41 +155,49 @@ CACHE_FNAME = "206_APIsAndDBs_cache.json"
 # Save the list of tuples in a variable called users_info.
 
 users_info = True
-
+slc_all_users='SELECT * FROM Users'
+users_info=cur.execute(slc_all_users).fetchall()
+#print(users_info)
 # Make a query to select all of the user screen names from the database. 
 # Save a resulting list of strings (NOT tuples, the strings inside them!) 
 # in the variable screen_names. HINT: a list comprehension will make 
 # this easier to complete! 
 screen_names = True
-
-
+slc_all_src_name='SELECT screen_name FROM Users'
+screen_names=[i[0] for i in cur.execute(slc_all_src_name).fetchall()]
+#print(screen_names)
 # Make a query to select all of the tweets (full rows of tweet information)
 # that have been retweeted more than 10 times. Save the result 
 # (a list of tuples, or an empty list) in a variable called retweets.
 retweets = True
-
-
-# Make a query to select all the descriptions (descriptions only) of 
+slect_twreets='SELECT * FROM Tweets WHERE retweets>10'
+retweets=cur.execute(slect_twreets).fetchall()
+#print(retweets)
+# Make a query to select all the descriptions (descriptions only) of
 # the users who have favorited more than 500 tweets. Access all those 
 # strings, and save them in a variable called favorites, 
 # which should ultimately be a list of strings.
 favorites = True
-
-
-# Make a query using an INNER JOIN to get a list of tuples with 2 
+slect_fav_usrs='SELECT * FROM Users WHERE num_favs>500'
+favorites=[i[3] for i in cur.execute(slect_fav_usrs).fetchall()]
+#print(favorites)
+# Make a query using an INNER JOIN to get a list of tuples with 2
 # elements in each tuple: the user screenname and the text of the 
 # tweet. Save the resulting list of tuples in a variable called joined_data2.
 joined_data = True
-
+slc_join_data='SELECT Users.screen_name,Tweets.text FROM Tweets JOIN Users ON Tweets.user_posted = Users.user_id'
+joined_data=cur.execute(slc_join_data).fetchall()
+#print(joined_data)
 # Make a query using an INNER JOIN to get a list of tuples with 2 
 # elements in each tuple: the user screenname and the text of the
 # tweet in descending order based on retweets. Save the resulting 
 # list of tuples in a variable called joined_data2.
 
 joined_data2 = True
-
-
-### IMPORTANT: MAKE SURE TO CLOSE YOUR DATABASE CONNECTION AT THE END 
+slc_join_data2='SELECT Users.screen_name,Tweets.text FROM Tweets JOIN Users ON Tweets.user_posted = Users.user_id ORDER BY Tweets.retweets DESC'
+joined_data2=cur.execute(slc_join_data2).fetchall()
+#print(joined_data2)
+### IMPORTANT: MAKE SURE TO CLOSE YOUR DATABASE CONNECTION AT THE END
 ### OF THE FILE HERE SO YOU DO NOT LOCK YOUR DATABASE (it's fixable, 
 ### but it's a pain). ###
 
@@ -146,97 +209,118 @@ print("\n\nBELOW THIS LINE IS OUTPUT FROM TESTS:\n")
 
 
 class Task1(unittest.TestCase):
-	def test_umich_caching(self):
-		fstr = open("206_APIsAndDBs_cache.json","r")
-		data = fstr.read()
-		fstr.close()
-		self.assertTrue("umich" in data)
-	def test_get_user_tweets(self):
-		res = get_user_tweets("umsi")
-		self.assertEqual(type(res),type(["hi",3]))
-	def test_umich_tweets(self):
-		self.assertEqual(type(umich_tweets),type([]))
-	def test_umich_tweets2(self):
-		self.assertEqual(type(umich_tweets[18]),type({"hi":3}))
-	def test_umich_tweets_function(self):
-		self.assertTrue(len(umich_tweets)>=20)
+    def test_umich_caching(self):
+        fstr = open("206_APIsAndDBs_cache.json", "r")
+        data = fstr.read()
+        fstr.close()
+        self.assertTrue("umich" in data)
+
+    def test_get_user_tweets(self):
+        res = get_user_tweets("umsi")
+        self.assertEqual(type(res), type(["hi", 3]))
+
+    def test_umich_tweets(self):
+        self.assertEqual(type(umich_tweets), type([]))
+
+    def test_umich_tweets2(self):
+        self.assertEqual(type(umich_tweets[18]), type({"hi": 3}))
+
+    def test_umich_tweets_function(self):
+        self.assertTrue(len(umich_tweets) >= 20)
+
 
 class Task2(unittest.TestCase):
-	def test_tweets_1(self):
-		conn = sqlite3.connect('206_APIsAndDBs.sqlite')
-		cur = conn.cursor()
-		cur.execute('SELECT * FROM Tweets');
-		result = cur.fetchall()
-		self.assertTrue(len(result)>=20, "Testing there are at least 20 records in the Tweets database")
-		conn.close()
-	def test_tweets_2(self):
-		conn = sqlite3.connect('206_APIsAndDBs.sqlite')
-		cur = conn.cursor()
-		cur.execute('SELECT * FROM Tweets');
-		result = cur.fetchall()
-		self.assertTrue(len(result[1])==5,"Testing that there are 5 columns in the Tweets table")
-		conn.close()
-	def test_tweets_3(self):
-		conn = sqlite3.connect('206_APIsAndDBs.sqlite')
-		cur = conn.cursor()
-		cur.execute('SELECT tweet_id FROM Tweets');
-		result = cur.fetchall()
-		self.assertTrue(result[0][0] != result[19][0], "Testing part of what's expected such that tweets are not being added over and over (tweet id is a primary key properly)...")
-		if len(result) > 20:
-			self.assertTrue(result[0][0] != result[20][0])
-		conn.close()
+    def test_tweets_1(self):
+        conn = sqlite3.connect('206_APIsAndDBs.sqlite')
+        cur = conn.cursor()
+        cur.execute('SELECT * FROM Tweets');
+        result = cur.fetchall()
+        self.assertTrue(len(result) >= 20, "Testing there are at least 20 records in the Tweets database")
+        conn.close()
 
+    def test_tweets_2(self):
+        conn = sqlite3.connect('206_APIsAndDBs.sqlite')
+        cur = conn.cursor()
+        cur.execute('SELECT * FROM Tweets');
+        result = cur.fetchall()
+        self.assertTrue(len(result[1]) == 5, "Testing that there are 5 columns in the Tweets table")
+        conn.close()
 
-	def test_users_1(self):
-		conn = sqlite3.connect('206_APIsAndDBs.sqlite')
-		cur = conn.cursor()
-		cur.execute('SELECT * FROM Users');
-		result = cur.fetchall()
-		self.assertTrue(len(result)>=2,"Testing that there are at least 2 distinct users in the Users table")
-		conn.close()
-	def test_users_2(self):
-		conn = sqlite3.connect('206_APIsAndDBs.sqlite')
-		cur = conn.cursor()
-		cur.execute('SELECT * FROM Users');
-		result = cur.fetchall()
-		self.assertTrue(len(result)<20,"Testing that there are fewer than 20 users in the users table -- effectively, that you haven't added duplicate users. If you got hundreds of tweets and are failing this, let's talk. Otherwise, careful that you are ensuring that your user id is a primary key!")
-		conn.close()
-	def test_users_3(self):
-		conn = sqlite3.connect('206_APIsAndDBs.sqlite')
-		cur = conn.cursor()
-		cur.execute('SELECT * FROM Users');
-		result = cur.fetchall()
-		self.assertTrue(len(result[0])==4,"Testing that there are 4 columns in the Users database")
-		conn.close()
+    def test_tweets_3(self):
+        conn = sqlite3.connect('206_APIsAndDBs.sqlite')
+        cur = conn.cursor()
+        cur.execute('SELECT tweet_id FROM Tweets');
+        result = cur.fetchall()
+        self.assertTrue(result[0][0] != result[19][0],
+                        "Testing part of what's expected such that tweets are not being added over and over (tweet id is a primary key properly)...")
+        if len(result) > 20:
+            self.assertTrue(result[0][0] != result[20][0])
+        conn.close()
+
+    def test_users_1(self):
+        conn = sqlite3.connect('206_APIsAndDBs.sqlite')
+        cur = conn.cursor()
+        cur.execute('SELECT * FROM Users');
+        result = cur.fetchall()
+        self.assertTrue(len(result) >= 2, "Testing that there are at least 2 distinct users in the Users table")
+        conn.close()
+
+    def test_users_2(self):
+        conn = sqlite3.connect('206_APIsAndDBs.sqlite')
+        cur = conn.cursor()
+        cur.execute('SELECT * FROM Users');
+        result = cur.fetchall()
+        self.assertTrue(len(result) < 20,
+                        "Testing that there are fewer than 20 users in the users table -- effectively, that you haven't added duplicate users. If you got hundreds of tweets and are failing this, let's talk. Otherwise, careful that you are ensuring that your user id is a primary key!")
+        conn.close()
+
+    def test_users_3(self):
+        conn = sqlite3.connect('206_APIsAndDBs.sqlite')
+        cur = conn.cursor()
+        cur.execute('SELECT * FROM Users');
+        result = cur.fetchall()
+        self.assertTrue(len(result[0]) == 4, "Testing that there are 4 columns in the Users database")
+        conn.close()
+
 
 class Task3(unittest.TestCase):
-	def test_users_info(self):
-		self.assertEqual(type(users_info),type([]),"testing that users_info contains a list")
-	def test_users_info2(self):
-		self.assertEqual(type(users_info[0]),type(("hi","bye")),"Testing that an element in the users_info list is a tuple")
+    def test_users_info(self):
+        self.assertEqual(type(users_info), type([]), "testing that users_info contains a list")
 
-	def test_track_names(self):
-		self.assertEqual(type(screen_names),type([]),"Testing that screen_names is a list")
-	def test_track_names2(self):
-		self.assertEqual(type(screen_names[0]),type(""),"Testing that an element in screen_names list is a string")
+    def test_users_info2(self):
+        self.assertEqual(type(users_info[0]), type(("hi", "bye")),
+                         "Testing that an element in the users_info list is a tuple")
 
-	def test_more_rts(self):
-		if len(retweets) >= 1:
-			self.assertTrue(len(retweets[0])==5,"Testing that a tuple in retweets has 5 fields of info (one for each of the columns in the Tweet table)")
-	def test_more_rts2(self):
-		self.assertEqual(type(retweets),type([]),"Testing that retweets is a list")
-	def test_more_rts3(self):
-		if len(retweets) >= 1:
-			self.assertTrue(retweets[1][-1]>10, "Testing that one of the retweet # values in the tweets is greater than 10")
+    def test_track_names(self):
+        self.assertEqual(type(screen_names), type([]), "Testing that screen_names is a list")
 
-	def test_descriptions_fxn(self):
-		self.assertEqual(type(favorites),type([]),"Testing that favorites is a list")
-	def test_descriptions_fxn2(self):
-		self.assertEqual(type(favorites[0]),type(""),"Testing that at least one of the elements in the favorites list is a string, not a tuple or anything else")
-	def test_joined_result(self):
-		self.assertEqual(type(joined_data[0]),type(("hi","bye")),"Testing that an element in joined_result is a tuple")
+    def test_track_names2(self):
+        self.assertEqual(type(screen_names[0]), type(""), "Testing that an element in screen_names list is a string")
 
+    def test_more_rts(self):
+        if len(retweets) >= 1:
+            self.assertTrue(len(retweets[0]) == 5,
+                            "Testing that a tuple in retweets has 5 fields of info (one for each of the columns in the Tweet table)")
+
+    def test_more_rts2(self):
+        self.assertEqual(type(retweets), type([]), "Testing that retweets is a list")
+
+    def test_more_rts3(self):
+        if len(retweets) >= 1:
+            self.assertTrue(retweets[1][-1] > 10,
+                            "Testing that one of the retweet # values in the tweets is greater than 10")
+
+    def test_descriptions_fxn(self):
+        self.assertEqual(type(favorites), type([]), "Testing that favorites is a list")
+
+    def test_descriptions_fxn2(self):
+        self.assertEqual(type(favorites[0]), type(""),
+                         "Testing that at least one of the elements in the favorites list is a string, not a tuple or anything else")
+
+    def test_joined_result(self):
+        self.assertEqual(type(joined_data[0]), type(("hi", "bye")),
+                         "Testing that an element in joined_result is a tuple")
 
 
 if __name__ == "__main__":
-	unittest.main(verbosity=2)
+    unittest.main(verbosity=2)
